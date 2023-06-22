@@ -1,0 +1,177 @@
+function moveRange(uint slippagePercent) external {
+        require(currentTokenId != 0, 'Not initialized');
+        require(canMoveRange(), "Not allowed to move range");
+
+        // collect fees
+        collect(0, 0);
+
+        MoveRangeParams memory params;
+
+        // calculate the amount of token0 and token1 based on the percentage of liquidity to be removed
+        (params.sqrtPriceX96,,,,,,) = uniswapV3Pool.slot0();
+
+        params.sqrtRatioA = TickMath.getSqrtRatioAtTick(currentTickLower);
+        params.sqrtRatioB = TickMath.getSqrtRatioAtTick(currentTickUpper);
+        (params.decreaseAmount0, params.decreaseAmount1) = LiquidityAmounts.getAmountsForLiquidity(params.sqrtPriceX96, params.sqrtRatioA, params.sqrtRatioB, totalLiquidity);
+
+        console.log("amount0wei LIB  : %s", params.decreaseAmount0);
+        console.log("amount1wei LIB  : %s", params.decreaseAmount1);
+
+        // decrease to 0
+        (params.amount0, params.amount1) = decreaseLiquidity(params.decreaseAmount0, params.decreaseAmount1, slippagePercent, totalLiquidity, address(this), true);
+
+        // burn the position
+        positionManager.burn(currentTokenId);
+
+        // mint new
+        (,params.currentTick,,,,,) = uniswapV3Pool.slot0();
+        params.tickSpace = uniswapV3Pool.tickSpacing();
+
+        //get tick interpolated to the nearest tick space
+        params.currentTickLowerInterpolated = floorDiv(params.currentTick, params.tickSpace) * params.tickSpace;
+        //params.currentTickUpperInterpolated = floorDiv(params.currentTick, params.tickSpace) * params.tickSpace + params.tickSpace;
+
+        //params.currentTickLowerInterpolated =  (params.currentTick / params.tickSpace) * params.tickSpace;
+        //params.currentTickUpperInterpolated =  ((params.currentTick / params.tickSpace) + 1) * params.tickSpace;
+
+        console.log("VALUES");
+        console.logInt(params.currentTickLowerInterpolated);
+        console.logInt(params.currentTick);
+        //console.logInt(params.currentTickUpperInterpolated);
+
+        // each tick being a .01% (1 basis point) price movement away from each of its neighboring ticks. to increase rang of eg 50% add 5000. for 0.01% add 1
+        params.newTickLower = params.currentTickLowerInterpolated - params.tickSpace * tickMovement;
+        params.newTickUpper = params.currentTickLowerInterpolated + params.tickSpace * tickMovement;
+
+        //calculate how much we need to swap to fulfill the required amounts
+        uint swapAmount0 = params.amount0 > params.amount1 ? params.amount0 : 0;
+        uint swapAmount1 = params.amount1 > params.amount0 ? params.amount1 : 0;
+
+        console.log("amount0  : %s", params.amount0);
+        console.log("amount1  : %s", params.amount1);
+
+        console.log("swapAmount0  : %s", swapAmount0);
+        console.log("swapAmount1  : %s", swapAmount1);
+        console.log("!!!!!!!!!!!!!");
+
+
+        console.log("swapAmount0  : %s", params.sqrtPriceLimitX96);
+        console.log("swapAmount1  : %s", TickMath.getSqrtRatioAtTick(params.newTickLower));
+
+        params.tokenIn = (swapAmount0 > 0) ? token0 : token1; // Token to swap from (0 if amount0 should be increased, 1 if amount1 should be increased)
+        params.tokenOut = (swapAmount0 > 0) ? token1 : token0; // Token to receive (opposite of tokenIn)
+        params.amountIn = (swapAmount0 > 0) ? swapAmount0 : swapAmount1; // Amount to swap from (either swapAmount0 or swapAmount1)
+
+        params.amountOutQuote = uniswapQuoter.quoteExactInputSingle(params.tokenIn, params.tokenOut, fee, params.amountIn, params.sqrtPriceLimitX96);
+        params.amountOutMinimum = params.amountOutQuote - (params.amountOutQuote * slippagePercent / 10000);
+
+        // we swap all 0 or 1 into 1 token
+        // Perform the token swap using Uniswap V3 SwapRouter (example code, comment only)
+        ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter.ExactInputSingleParams({
+            tokenIn: params.tokenIn,
+            tokenOut: params.tokenOut,
+            fee: fee,
+            recipient: address(this),
+            deadline: block.timestamp,
+            amountIn: params.amountIn,
+            amountOutMinimum: params.amountOutMinimum,
+            sqrtPriceLimitX96: params.sqrtPriceLimitX96
+        });
+
+        // Perform the token approval for the swap
+        if (swapParams.tokenIn != WETH) {
+            IERC20(swapParams.tokenIn).safeApprove(address(uniswapV3Router), 0);
+            IERC20(swapParams.tokenIn).safeApprove(address(uniswapV3Router), swapParams.amountIn);
+        }
+
+        // The call to `exactInputSingle` executes the swap.
+        uint returnFromSwap = uniswapV3Router.exactInputSingle{value: swapParams.tokenIn == WETH ? swapParams.amountIn : 0}(swapParams);
+        console.log("return %s", returnFromSwap);
+
+        if (swapParams.tokenOut == WETH) {
+            IWETH9(WETH).approve(WETH, 0);
+            IWETH9(WETH).approve(WETH, IERC20(WETH).balanceOf(address(this)));
+            IWETH9(WETH).withdraw(IERC20(WETH).balanceOf(address(this)));
+        }
+
+        params.amountOutQuote = uniswapQuoter.quoteExactInputSingle(swapParams.tokenOut, swapParams.tokenIn, fee, returnFromSwap / 2, params.sqrtPriceLimitX96);
+        params.amountOutMinimum = params.amountOutQuote - (params.amountOutQuote * slippagePercent / 10000);
+
+        // after this we have all in one token
+        // we swap all 0 or 1 into 1 token
+        // Perform the token swap using Uniswap V3 SwapRouter (example code, comment only)
+        ISwapRouter.ExactInputSingleParams memory swapParamsNew = ISwapRouter.ExactInputSingleParams({
+            tokenIn: swapParams.tokenOut,  // Token to swap from (0 if amount0 should be increased, 1 if amount1 should be increased)
+            tokenOut: swapParams.tokenIn, // Token to receive (opposite of tokenIn)
+            fee: fee,
+            recipient: address(this),
+            deadline: block.timestamp,
+            amountIn: returnFromSwap / 2, // Amount to swap from (either swapAmount0 or swapAmount1)
+            amountOutMinimum: params.amountOutMinimum,
+            sqrtPriceLimitX96: params.sqrtPriceLimitX96
+        });
+
+        // Perform the token approval for the swap
+        if (swapParamsNew.tokenIn != WETH) {
+            IERC20(swapParamsNew.tokenIn).safeApprove(address(uniswapV3Router), 0);
+            IERC20(swapParamsNew.tokenIn).safeApprove(address(uniswapV3Router), swapParamsNew.amountIn);
+            console.log("we have WETH");
+        }
+        console.log("we have WETH1");
+        console.log("we have token1: %s", swapParamsNew.tokenIn);
+
+        // The call to `exactInputSingle` executes the swap.
+        uint returnFromSwapFinal = uniswapV3Router.exactInputSingle{value: swapParamsNew.tokenIn == WETH ? swapParamsNew.amountIn : 0}(swapParamsNew);
+
+        // get eth back
+        if (swapParamsNew.tokenOut == WETH) {
+            IWETH9(WETH).approve(WETH, 0);
+            IWETH9(WETH).approve(WETH, IERC20(WETH).balanceOf(address(this)));
+            IWETH9(WETH).withdraw(IERC20(WETH).balanceOf(address(this)));
+        }
+
+        console.log("mint amounts");
+        console.log("0 is ETH: %s", params.tokenIn == WETH);
+        console.log("1 is ETH: %s", params.tokenIn != WETH);
+        console.log("0: %s", params.tokenIn == WETH ? returnFromSwap/2 : returnFromSwapFinal);
+        console.log("1: %s", params.tokenIn != WETH ? returnFromSwap/2 : returnFromSwapFinal);
+
+        // mint new position
+        mint(params.newTickLower,
+            params.newTickUpper,
+            params.tokenIn == WETH ? returnFromSwapFinal : returnFromSwap/2 ,
+            params.tokenIn == WETH ? returnFromSwap/2 : returnFromSwapFinal,
+            slippagePercent,
+            true)
+        ;
+        emit MovedRange(params.newTickLower, params.newTickUpper);
+    }
+
+    function mint(
+        int24 tickLower,
+        int24 tickUpper,
+        uint amountDesired0,
+        uint amountDesired1,
+        uint slippagePercent,
+        bool contractCall
+    ) internal {
+        // check if locked
+        require(!isLocked, "Locked for minting");
+
+        // get mint decreaseParams
+        INonfungiblePositionManager.MintParams memory mintParams = INonfungiblePositionManager.MintParams(
+        {
+        token0 : token0,
+        token1 : token1,
+        fee : fee,
+        tickLower : tickLower,
+        tickUpper : tickUpper,
+        amount0Desired : amountDesired0,
+        amount1Desired : amountDesired1,
+        amount0Min : amountDesired0 - (amountDesired0 * slippagePercent / 10000),
+        amount1Min : amountDesired1 - (amountDesired1 * slippagePercent / 10000),
+        recipient : address(this),
+        deadline : block.timestamp
+        }
+        );
+    }
