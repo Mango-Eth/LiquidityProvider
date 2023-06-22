@@ -64,22 +64,74 @@ contract LiquidityProvision {
     }
 
 
-    // Methods:
-    function ticks(
-        uint24 tickSpacing,
-        int24 slot0_tick
-    ) internal pure returns(int24 lowerTick, int24 upperTick) {
-        // Lets get 3 ticks separating the current price on each side:
-            lowerTick = (roundTick(slot0_tick, tickSpacing) - (3 * int24(tickSpacing)));
-            upperTick = (roundTick(slot0_tick, tickSpacing) + (3 * int24(tickSpacing)));
-    }
 
-    // Gets tick in correct tickSpacing:
-    function roundTick(int24 tick, uint24 tickSpacing) internal pure returns (int24) {
-        int24 roundedTick = (tick / int24(tickSpacing)) * int24(tickSpacing);
-        if (tick < 0 && tick % int24(tickSpacing) != 0) {
-            roundedTick -= int24(tickSpacing);
-        }
-        return roundedTick;
-    }
+    // // Methods:
+    // function ticks(
+    //     uint24 tickSpacing,
+    //     int24 slot0_tick
+    // ) public pure returns(int24 lowerTick, int24 upperTick) {
+    //     (int24 closest_tick, bool zer) = roundTick(slot0_tick, tickSpacing);
+
+    //     if(zer) {   // Means raw tick is closest to perfect tick above it. (LowerTick * 1 space, UpperTick * 2 spaces)
+    //         lowerTick = closest_tick - (3 * int24(tickSpacing));
+    //         upperTick = closest_tick + (5 * int24(tickSpacing));
+    //     } else {    // Raw tick roundsDOWN. (LowerTick * 2 spaces, UpperTick * 1 space)
+    //         lowerTick = closest_tick - (5 * int24(tickSpacing));
+    //         upperTick = closest_tick + (3 * int24(tickSpacing));
+    //     }
+    // }
+
+    //     function roundTick(int24 tick, uint24 tickSpacing) public pure returns (int24 closest_tick, bool zer) {
+    //         int24 plus_1 = int24(tickSpacing) / 2;
+            
+    //         if (tick >= 0) {
+    //             closest_tick = int24(((tick + plus_1) / int24(tickSpacing)) * int24(tickSpacing));
+    //             zer = closest_tick > tick;
+    //         } else {
+    //             closest_tick = int24(((tick - plus_1) / int24(tickSpacing)) * int24(tickSpacing));
+    //             zer = closest_tick < tick;
+    //         }
+    //     }
+
+    // Methods:
+            function roundTick_dir(int24 tick, uint24 tickSpacing) public pure returns (int24 closest_tick, bool wasRoundedUp, int24 diff) {
+                int24 plus_1 = int24(tickSpacing) / 2;
+
+                if (tick >= 0) {
+                    closest_tick = int24(((tick + plus_1 + 1) / int24(tickSpacing)) * int24(tickSpacing));
+                    wasRoundedUp = closest_tick > tick;
+                    diff = closest_tick - tick;
+                } else {
+                    closest_tick = int24(((tick - plus_1 - 1) / int24(tickSpacing)) * int24(tickSpacing));
+                    wasRoundedUp = closest_tick < tick;
+                    diff = tick - closest_tick;
+                }
+
+                // Always pos
+                if (diff < 0) {
+                    diff = -diff;
+                }
+            }
+
+            function ticks(
+                uint24 tickSpacing,
+                int24 slot0_tick
+            ) public pure returns(int24 lowerTick, int24 upperTick) {
+                (int24 closest_tick, bool zer, int24 diff) = roundTick_dir(slot0_tick, tickSpacing);
+
+                if(diff > 39) {
+                if(zer) {   // Means raw tick is closest to perfect tick above it. (LowerTick * 1 space, UpperTick * 2 spaces)
+                    lowerTick = closest_tick - (3 * int24(tickSpacing));
+                    upperTick = closest_tick + (2 * int24(tickSpacing));
+                } else {    // Raw tick roundsDOWN. (LowerTick * 2 spaces, UpperTick * 1 space)
+                    lowerTick = closest_tick - (2 * int24(tickSpacing));
+                    upperTick = closest_tick + (3 * int24(tickSpacing));
+                }
+                } else {
+                    // Here the raw tick is close enough to simply add and subtract 3 times for range.
+                    lowerTick = closest_tick - (3 * int24(tickSpacing));
+                    upperTick = closest_tick + (3 * int24(tickSpacing));
+                }
+            }
+        
 }

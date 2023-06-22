@@ -28,6 +28,7 @@ async function main() {
 
     // For accounting:
     const provBalance1 = await mangoRouter.balanceOf(caller);
+    const provBalance0 = await wethRouter.balanceOf(caller);
 
     // Deploy SwapRouter contract:
     const SwapRouter = await hre.ethers.getContractFactory("SwapRouter");
@@ -40,30 +41,55 @@ async function main() {
     // Making swapRouter:
     const sRouter = new ethers.Contract(swapper, _Swap.abi, wallet);
 
-    // Approving:
-    const amountEth = ethers.utils.parseEther("1");
-    const approveEth = await wethRouter.approve(swapRouter.address, amountEth);
-    await approveEth.wait();
-
     const lowestSqrt = await sRouter.returnLowestSqrt();
     const highestSqrt = await sRouter.returnHighestSqrt();
 
-    const swapEthIn = await sRouter.swap(
+    // // Approving ETH:
+    // const amountEth = ethers.utils.parseEther("1");
+    // const approveEth = await wethRouter.approve(swapRouter.address, amountEth);
+    // await approveEth.wait();
+
+    // // Swap ETH:
+    // const swapEthIn = await sRouter.swap(
+    //     caller,
+    //     true,               
+    //     amountEth,
+    //     lowestSqrt,
+    //     [],
+    //     pool
+    // );
+    // await swapEthIn.wait();
+    // console.log("Success");
+
+
+    // Approving MNGO:
+    const amountMango = ethers.utils.parseEther("3000");
+    const approveMango = await mangoRouter.approve(swapRouter.address, amountMango);
+    await approveMango.wait();
+
+    // Swap Mango:
+    const swapMangoIn = await sRouter.swap(
         caller,
-        true,               
-        amountEth,
-        lowestSqrt,
+        false,               
+        amountMango,
+        highestSqrt,
         [],
         pool
     );
-    await swapEthIn.wait();
+    await swapMangoIn.wait();
     console.log("Success");
 
-    // After swap accounting:
+
+    // After swap accounting: ETH
     const provBalance1_after = await mangoRouter.balanceOf(caller);
     let amountSpent1_real = provBalance1_after - provBalance1;
     
     console.log("You recieved:", amountSpent1_real);
+
+    // After swap accounting: MANGO
+    const provBalance0_after = await mangoRouter.balanceOf(caller);
+    let amountSpent0_real = provBalance0_after - provBalance0;
+    console.log("Your recieved:", amountSpent0_real);
 }
 
 

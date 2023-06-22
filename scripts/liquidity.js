@@ -14,7 +14,7 @@ const mango = "0x9B021B66dE135c5273de2145FEF6C21703155A56";
 const manager = "0x54B9C3D4c9761601D738beE666bc31D81C437Df1";
 const pool = "0xc366baC79689773Dda1f02A1DF74B2FA15EC602e";      // WETH_0 - Mango_1
 let caller = "0xAe4CfFcF8A14EfD0366190c0373e6b1336226091";
-const LiquidityProvider = "0xe0fEEb93D6EB89F33C9657b691ffE43EC64b60ca";
+const LiquidityProvider = "0xF180f68aE77E7f5dD6c231bA5f78B4edF9940CDa";
 
 const wethRouter = new ethers.Contract(weth, IERC20.abi, wallet);
 const mangoRouter = new ethers.Contract(mango, IERC20.abi, wallet);
@@ -29,7 +29,7 @@ async function main() {
     const slot = await poolRouter.slot0();
     const sqrtPriceX96 = slot.sqrtPriceX96;
     let priceRatio = (sqrtPriceX96 / 2**96) ** 2;
-    console.log("1 weth equals:",priceRatio, "MNGO");
+    console.log("MangoPrice:",priceRatio);
 
     // Provision amounts for test:
     let amount0 = ethers.utils.parseEther("1");
