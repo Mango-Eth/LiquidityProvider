@@ -65,7 +65,7 @@ async function main() {
     
     let amountSpent0_real = provBalance0 - provBalance0_after;
     let amountSpent1_real = provBalance1 - provBalance1_after;
-    console.log("Real values spent:", ethers.utils.formatUnits(amountSpent0_real), ethers.utils.formatUnits(amountSpent1_real));
+    console.log("Real values spent:", amountSpent0_real, amountSpent1_real);
 }
 
 
