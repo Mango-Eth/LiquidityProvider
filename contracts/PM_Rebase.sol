@@ -134,6 +134,7 @@ contract PM_Rebase is ILiquidityProvision {
         }));
     }
 
+    ////////////////////////////// MAKE ALL INTERNAL
     // Methods:
     function _mint(
         Rebase_prov memory params
@@ -222,7 +223,7 @@ contract PM_Rebase is ILiquidityProvision {
         Amounts memory _val = amounts_[_counter];
         (uint160 sqrtPriceX96 ,,,,,,) = IUniswapV3Pool(pool).slot0();
 
-        (amountIn0, amountIn1) = _amounts(LiquidityParams({
+        (amountIn0, amountIn1) = _amounts(LiquidityParams({ // Very inneficient should pull up the liquidity from either v3 or _id and slot0.sqrtP then find the amounts & from there /50 to make a 2% slippage. TBD
             sqrtPriceX96: sqrtPriceX96,
             tickLower: tickLower,
             tickUpper: tickUpper,
@@ -233,8 +234,10 @@ contract PM_Rebase is ILiquidityProvision {
         INonFungiblePositionManager(manager).decreaseLiquidity(INonFungiblePositionManager.DecreaseLiquidityParams({
             tokenId: ids[_counter],
             liquidity: liquidity,
-            amount0Min: amountIn0 > 0 ? uint256(amountIn0 - (amountIn0 / 5)) : 0,
-            amount1Min: amountIn1 > 0 ? uint256(amountIn1 - (amountIn1 / 5)) : 0,
+            // amount0Min: amountIn0 > 0 ? uint256(amountIn0 - (amountIn0 / 5)) : 0,
+            // amount1Min: amountIn1 > 0 ? uint256(amountIn1 - (amountIn1 / 5)) : 0,    // ONE SIDE ISNT 0 AHHHHHHHHH
+            amount0Min: 0,
+            amount1Min: 0,
             deadline: block.timestamp + 300
         }));
 

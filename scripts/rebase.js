@@ -212,9 +212,12 @@ async function main() {
     const highestSqrt = await swapRouter.returnHighestSqrt();
 
     // Approving WETH:
-    const amountEth_In = ethers.utils.parseEther("2.2");
+    const amountEth_In = ethers.utils.parseEther("2.5");
     const approveEth_In = await wethRouter.approve(swapper, amountEth_In);
     await approveEth_In.wait();
+
+    // Debugging previous sqrtP:
+    const prevSlot0 = await poolRouter.slot0();
 
     // Starting swap to push position out of bounds, therefore making the position purely eth:
 
@@ -253,6 +256,8 @@ async function main() {
     const position_ = await managerRouter.positions(id_);
     console.log(position_);
 
+    console.log("New sqrtP", sslot.sqrtPriceX96.toString(), "Previous sqrtP", prevSlot0.sqrtPriceX96.toString());
+
     // let key = keccak256(['bytes'], [pack(['address', 'int24', 'int24'], [manager, position_[5], position_[6]])]);
 
     // const v3Position = await poolRouter.positions(key);
@@ -275,7 +280,7 @@ async function main() {
         manager: manager,
         swapRouter: swapper,
         cntr: 0,
-        zer: false,              // True = positions is mostly weth : pos is mostly mango
+        zer: zer ? true : false,                     // True = positions is mostly weth : pos is mostly mango
         fee: 3000,
         tickSpacing: 60
     }
@@ -283,7 +288,23 @@ async function main() {
     const _rebasing = await rebaseRouter.brn_Swap_Mnt(rebase_params);
     await _rebasing.wait();
 
-    console.log("Done.")
+    console.log("Just brned, swapped & minted a new position.");
+
+    // Because i couldnt get the upper block to work
+    // IDk how much eth the initial position is supposed to end up with, so i cant exactly tell how much the contract
+    // swapped & how off the precision of the ticks were.
+    // Final accounting:
+
+    const finalSlot0 = await poolRouter.slot0();
+    const newId = await rebaseRouter.ids(1);
+    const _ticksOfNewPosition = await managerRouter.positions(newId);
+    console.log("Current Tick:", finalSlot0.tick, "Ticks of position:", _ticksOfNewPosition[5], _ticksOfNewPosition[6]);
+
+    const finalBal0 = await wethRouter.balanceOf(rebaseContract);
+    const finalBal1 = await mangoRouter.balanceOf(rebaseContract);
+
+    console.log(ethers.utils.formatUnits(finalBal0), ethers.utils.formatUnits(finalBal1));
+
 }
 
 
