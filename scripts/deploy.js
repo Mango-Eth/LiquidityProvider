@@ -2,8 +2,9 @@ const hre = require("hardhat");
 
 async function main() {
 
-    const Test = await hre.ethers.getContractFactory("LiquidityProvision");
-    const test = await Test.deploy();
+    let burnerAddress = "0x1E0a1B6E84CB7862137E9Eb5dE6b8b7da29a5378";
+    const Test = await hre.ethers.getContractFactory("PM_Rebase");
+    const test = await Test.deploy(burnerAddress);
 
     await test.deployed()
     .then(() => console.log(test.address))

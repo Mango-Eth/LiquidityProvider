@@ -1,12 +1,26 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: BUILT by Mango
 pragma solidity ^0.8.9;
 
 import "./interfaces/IUniswapV3Pool.sol";
 import "./interfaces/IERC20.sol";
 import "./libraries/TickMath.sol";
+import "./libraries/ABDKMath64x64.sol";
+import "./libraries/LiquidityMath.sol";
+import "./libraries/Math.sol";
 
 
 contract SwapRouter {   // Needs approval from user.
+
+
+    struct Estimate_Params {
+            uint160 sqrtPriceX96;
+            int24 tickLower;
+            int24 tickUpper;
+            uint128 liquidity;
+        }
+
+    uint8 internal constant RESOLUTION = 96;
+    uint256 internal constant Q96 = 2**96;
 
     function swap(
         address _recipient,
@@ -37,9 +51,65 @@ contract SwapRouter {   // Needs approval from user.
         pool = blob;
     }
 
+        function _q96(               // Calculates the sqrtP regardless of token0 or token1.
+        bool _zeroForOne,       
+        int256 rate
+    ) public pure returns(uint160 fn) {             // This function requires that the softCap needs to be atleast 1 bnb.
+        if(_zeroForOne){    // rate/ETHERAMOUNT = price. 
+            fn = _sqrtP(ABDKMath64x64.fromInt(rate));   // Remember that the rate is the sqrtP. Its a possitive value if weth is 0. Because we do: token/weth. Which is nothing else than: (weth*ratio)/weth.
+        } else {    // ETHERAMOUNT// rate
+            // Because token is 0 now. The division is like this: weth/token or weth/(weth*ratio) making the result a decimal and into negative ticks.
+            // This side is just 1/ratio.
+            int128 num = 1 << 64; 
+            int128 den = ABDKMath64x64.fromInt(rate);
+            int128 finalValue = ABDKMath64x64.div(num, den);
+            fn = _sqrtP(finalValue);
+        }
+    }
 
 
+    function _sqrtP(int128 val) internal pure returns(uint160) {
+        return
+            uint160(
+                int160(
+                    ABDKMath64x64.sqrt(int128(val)) <<
+                        (RESOLUTION - 64)
+                )
+            );
+    }
 
+    function _time() public view returns(uint256) {
+        return block.timestamp;
+    }
+
+    function roundTick(int24 tick, uint24 tickSpacing) public pure returns (int24) {
+        int24 halfSpacing = int24(tickSpacing) / 2;
+        if (tick >= 0) {
+            return int24(((tick + halfSpacing) / int24(tickSpacing)) * int24(tickSpacing));
+        } else {
+            return int24(((tick - halfSpacing) / int24(tickSpacing)) * int24(tickSpacing));
+        }
+    }
+
+    function estimate(
+        Estimate_Params memory params
+    ) public pure returns(int256 amount0, int256 amount1) {
+            uint160 lower_sqrt = TickMath.getSqrtRatioAtTick(params.tickLower);
+            uint160 upper_sqrt = TickMath.getSqrtRatioAtTick(params.tickUpper);
+
+
+        amount0 = Math._calcAmount0Delta(
+            params.sqrtPriceX96,
+            upper_sqrt,
+            int128(params.liquidity)
+        );
+
+        amount1 = Math._calcAmount1Delta(
+            params.sqrtPriceX96,
+            lower_sqrt,
+            int128(params.liquidity)
+        );
+    }
 
 
     // View:

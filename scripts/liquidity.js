@@ -2,7 +2,7 @@ const hre = require("hardhat");
 const IERC20 = require("../artifacts/contracts/interfaces/IERC20.sol/IERC20_.json");
 const _Manager = require("../artifacts/contracts/interfaces/INonFungiblePositionManager.sol/INonFungiblePositionManager.json");
 const _v3 = require("../artifacts/contracts/interfaces/IUniswapV3Pool.sol/IUniswapV3Pool.json");
-const _Prov = require("../artifacts/contracts/LiquidityProvision.sol/LiquidityProvision.json");
+const _Prov = require("../artifacts/contracts/PM_Rebase.sol/PM_Rebase.json");
 const { ethers, Wallet } = require("ethers");
 
 var url = "https://rpc.testnet.fantom.network"; 
@@ -14,7 +14,7 @@ const mango = "0x9B021B66dE135c5273de2145FEF6C21703155A56";
 const manager = "0x54B9C3D4c9761601D738beE666bc31D81C437Df1";
 const pool = "0xc366baC79689773Dda1f02A1DF74B2FA15EC602e";      // WETH_0 - Mango_1
 let caller = "0xAe4CfFcF8A14EfD0366190c0373e6b1336226091";
-const LiquidityProvider = "0xF180f68aE77E7f5dD6c231bA5f78B4edF9940CDa";
+const LiquidityProvider = "0x47a9aD306219Ff7a2D6BBa858C128bFfF3ACb14B";
 
 const wethRouter = new ethers.Contract(weth, IERC20.abi, wallet);
 const mangoRouter = new ethers.Contract(mango, IERC20.abi, wallet);
@@ -29,7 +29,7 @@ async function main() {
     const slot = await poolRouter.slot0();
     const sqrtPriceX96 = slot.sqrtPriceX96;
     let priceRatio = (sqrtPriceX96 / 2**96) ** 2;
-    console.log("MangoPrice:",priceRatio);
+    console.log("MangoPrice:", priceRatio);
 
     // Provision amounts for test:
     let amount0 = ethers.utils.parseEther("1");
@@ -46,14 +46,18 @@ async function main() {
     const provBalance1 = await mangoRouter.balanceOf(LiquidityProvider);
     console.log("Contract Balance:", ethers.utils.formatUnits(provBalance0), ethers.utils.formatUnits(provBalance1))
 
+    let params = {
+        pool: pool,
+        manager: manager,
+        amount0: amount0,
+        amount1: amount1,
+        fee: 3000,
+        tickSpacing: 60
+    }
+
     // Provide liq:
     const testing = await providerRouter.provision(
-        pool,
-        manager,
-        amount0,
-        amount1,
-        3000,
-        60
+        params
     );
         await testing.wait();
     
