@@ -17,7 +17,24 @@ let caller = "0xAe4CfFcF8A14EfD0366190c0373e6b1336226091";
 
 const managerRouter = new ethers.Contract(manager, _Manager.abi, wallet);
 
-
+/*
+This script does:
+1) Creates 2 regular erc20 tokens.
+2) Creates a pool with those 2 tokens. The ratios are 52 Mangos for 1 weth.
+If weth is token0 sqrtPrice is 52. Else if weth is token1 sqrtPrice is 1/52.
+3) We make an initial position, with ticks spaced 600 units on each side.
+Here we deposit 20 eth & 520 mangos.
+With this the environment is done.
+4) We deploy PM_Rebase.sol contract. (Which is a rebalancer)
+5) We call provision(). Which makes a position with ticks spaced almost perfectly. 50-49
+Here we deposit 1 eth & 52 mangos.
+6) We make a swap that pushes the price outiside the range of the smart contracts positions, upper tick.
+This means, that the position with (1 eth, 52 mangos), turned into (2 eth + fees).
+7) Finally we now call brn_Swap_Mnt(). Which as the name sais, burnes the position that now has 2 eth.
+Then the smart contract swaps half of its balance, in this case 1 eth for some amount of mangos.
+We then mint yet another balance with nicely spaced ticks 50-49 in the current sqrtPrice, because of the
+previously strong swap, is different.
+*/
 
 async function main() {
 
