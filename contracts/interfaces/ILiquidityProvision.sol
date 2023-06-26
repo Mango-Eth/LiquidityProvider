@@ -22,6 +22,7 @@ interface ILiquidityProvision {
         uint256 amount1;
         uint24 fee;
         uint24 tickSpacing;
+        bool zer;
     }
 
     struct Rebase {
@@ -41,6 +42,7 @@ interface ILiquidityProvision {
         address pool;
         uint24 fee;
         uint24 tickSpacing;
+        bool zer;
     }
 
     struct LiquidityParams {

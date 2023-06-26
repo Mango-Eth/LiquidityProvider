@@ -13,7 +13,7 @@ import "./libraries/Math.sol";
 import "./libraries/LiquidityMath.sol";
 import "./libraries/TickMath.sol";
 
-contract PM_Rebase is ILiquidityProvision {
+contract PM_Rebalancer is ILiquidityProvision {
 
     address immutable public burner;
     uint256 public counter;     
@@ -37,20 +37,20 @@ contract PM_Rebase is ILiquidityProvision {
         uint256 amount0_prior;
         uint256 amount1_prior;
         {
-            token0= IUniswapV3Pool(params.pool).token0();
+            token0 = IUniswapV3Pool(params.pool).token0();
             token1 = IUniswapV3Pool(params.pool).token1();
 
             // Approving Manager to spend:
             amount0_prior = IERC20_(token0).balanceOf(msg.sender);
             amount1_prior = IERC20_(token1).balanceOf(msg.sender);
-            IERC20_(token0).approve(params.manager, params.amount0);            // This needs to be changed. Should approve amounts that 
-            IERC20_(token1).approve(params.manager, params.amount1);            // Were estimated by _amounts(). Not a fix value 
+            IERC20_(token0).approve(params.manager, IERC20_(token0).balanceOf(address(this)));            // This needs to be changed. Should approve amounts that 
+            IERC20_(token1).approve(params.manager, IERC20_(token1).balanceOf(address(this)));            // Were estimated by _amounts(). Not a fix value 
 
             // Getting slot0.tick:
             (uint160 sqrtPriceX96 ,int24 slot0_tick,,,,,) = IUniswapV3Pool(params.pool).slot0();
 
-            // Getting ticks:
-            (tickLower, tickUpper) = ticks(params.tickSpacing, slot0_tick);
+// Getting ticks:
+            (tickLower, tickUpper) = params.zer ? ticks(params.tickSpacing, slot0_tick) : ticks2(params.tickSpacing, slot0_tick);
 
             // Simulate deposit:
             (int256 amountIn0, int256 amountIn1) = _amounts(LiquidityParams({
@@ -130,7 +130,8 @@ contract PM_Rebase is ILiquidityProvision {
             manager: params.manager,
             pool: params.pool,
             fee: params.fee,
-            tickSpacing: params.tickSpacing
+            tickSpacing: params.tickSpacing,
+            zer: params.zer
         }));
     }
 
@@ -153,7 +154,7 @@ contract PM_Rebase is ILiquidityProvision {
             IERC20_(params.token1).approve(params.manager, _amountIn1);
 
             // Getting ticks:
-            (tickLower, tickUpper) = ticks(params.tickSpacing, slot0_tick);
+            (tickLower, tickUpper) = params.zer ? ticks(params.tickSpacing, slot0_tick) : ticks2(params.tickSpacing, slot0_tick);
 
             // Simulate deposit:
             (int256 amountIn0, int256 amountIn1) = _amounts(LiquidityParams({
@@ -275,7 +276,7 @@ contract PM_Rebase is ILiquidityProvision {
                 }
             }
 
-            function ticks(
+            function ticks(     // Because roundTick_dir already rounds either up or down, whcih ever is closest.        
                 uint24 tickSpacing,
                 int24 slot0_tick
             ) public pure returns(int24 lowerTick, int24 upperTick) {
@@ -289,6 +290,28 @@ contract PM_Rebase is ILiquidityProvision {
                 } else {    // Raw tick roundsDOWN. (LowerTick * 2 spaces, UpperTick * 1 space)
                     lowerTick = closest_tick - (2 * int24(tickSpacing));
                     upperTick = closest_tick + (3 * int24(tickSpacing));
+                }
+                } else {
+                    // Here the raw tick is close enough to simply add and subtract 3 times for range.
+                    lowerTick = closest_tick - (3 * int24(tickSpacing));
+                    upperTick = closest_tick + (3 * int24(tickSpacing));
+                }
+            }
+
+            function ticks2(
+                uint24 tickSpacing,
+                int24 slot0_tick
+            ) public pure returns(int24 lowerTick, int24 upperTick) {
+                (int24 closest_tick, bool zer, int24 diff) = roundTick_dir(slot0_tick, tickSpacing);
+
+                if(diff >= 20) {        // NEEDS TINKERING --- Making the threshold larger allows more token0 input & less token1 i think. Needs testing.
+
+                if(zer) {   // Means raw tick is closest to perfect tick above it. (LowerTick * 1 space, UpperTick * 2 spaces)
+                    lowerTick = closest_tick - (2 * int24(tickSpacing));
+                    upperTick = closest_tick + (3 * int24(tickSpacing));
+                } else {    // Raw tick roundsDOWN. (LowerTick * 2 spaces, UpperTick * 1 space)
+                    lowerTick = closest_tick - (3 * int24(tickSpacing));
+                    upperTick = closest_tick + (2 * int24(tickSpacing));
                 }
                 } else {
                     // Here the raw tick is close enough to simply add and subtract 3 times for range.

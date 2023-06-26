@@ -199,10 +199,9 @@ async function main() {
         amount0: zer ? amount0 : amount1,
         amount1: zer ? amount1 : amount0,
         fee: 3000,
-        tickSpacing: 60,
-        zer: zer
+        tickSpacing: 60
     }
-    console.log("Smart contract pos params:", params_Provision);
+    console.log("Provision params:", params_Provision);
 
     // Provide liq:
     const testing = await rebaseRouter.provision(
@@ -216,7 +215,9 @@ async function main() {
     
     let amountSpent0_real = provBalance0 - provBalance0_after;
     let amountSpent1_real = provBalance1 - provBalance1_after;
-    console.log("Real values spent:", amountSpent0_real, amountSpent1_real);    
+    console.log("Real values spent:", amountSpent0_real, amountSpent1_real); 
+    
+    console.log("After provision, balances:", ethers.utils.formatUnits(provBalance0_after), ethers.utils.formatUnits(provBalance1_after));
     
     console.log("Success, contract provided into a range");
 
@@ -242,6 +243,9 @@ async function main() {
 
     // Debugging previous sqrtP:
     const prevSlot0 = await poolRouter.slot0();
+
+    const _liquiditiy_after_swap2 = await poolRouter.liquidity();
+    console.log("L brefore swap:", _liquiditiy_after_swap2.toString());
 
     // Starting swap to push position out of bounds, therefore making the position purely eth:
 
@@ -272,65 +276,22 @@ async function main() {
     await swapEthIn.wait();
     }
 
-    const sslot = await poolRouter.slot0(); // Still doenst work -.-
+    const sslot = await poolRouter.slot0();
     console.log("Swap worked!", "New Current Tick:", sslot.tick, "Your last position:", position[5], position[6]);
+    const _liquiditiy_after_swap = await poolRouter.liquidity();
+    console.log("L after swap:", _liquiditiy_after_swap.toString());
 
-    const id_ = await rebaseRouter.ids(_counter);
-    console.log("Position after swap:", id_);
-    const position_ = await managerRouter.positions(id_);
-    console.log("Manager Id params:", position_);
+    // Try burning:
 
-    console.log("New sqrtP", sslot.sqrtPriceX96.toString(), "New Tick:", sslot.tick, "Previous sqrtP", prevSlot0.sqrtPriceX96.toString());
+    const burning = await rebaseRouter._burn_v3(manager, _pool, _counter);
+    await burning.wait();
+    console.log("Success");
 
-    let key = keccak256(['bytes'], [pack(['address', 'int24', 'int24'], [manager, position_[5], position_[6]])]);
-
-    const v3Position = await poolRouter.positions(key);
-    console.log("V3pool pos:", v3Position);
-
-    let estimation_params = {
-        sqrtPriceX96: sslot.sqrtPriceX96,
-        tickLower: position_[5],
-        tickUpper: position_[6],
-        liquidity: v3Position[0]
-    }
-
-    const estimating_Returns = await swapRouter.estimate(estimation_params);        // Id liquidity doesnt update, need it from v3, still wrong somehow wtf
-    console.log(estimating_Returns);
-
-    // Finally we perform the rebase with brn_Swap_Mnt function:
-
-    let rebase_params = {
-        pool: _pool,
-        manager: manager,
-        swapRouter: swapper,
-        cntr: 0,
-        zer: zer ? true : false,                     // True = positions is mostly weth : pos is mostly mango
-        fee: 3000,
-        tickSpacing: 60
-    }
-
-    const _rebasing = await rebaseRouter.brn_Swap_Mnt(rebase_params);
-    await _rebasing.wait();
-
-    console.log("Just brned, swapped & minted a new position.");
-
-    // Because i couldnt get the upper block to work
-    // IDk how much eth the initial position is supposed to end up with, so i cant exactly tell how much the contract
-    // swapped & how off the precision of the ticks were.
-    // Final accounting:
-
-    const finalSlot0 = await poolRouter.slot0();
-    const newId = await rebaseRouter.ids(1);
-    const _ticksOfNewPosition = await managerRouter.positions(newId);
-    console.log("Current Tick:", finalSlot0.tick, "Ticks of position:", _ticksOfNewPosition[5], _ticksOfNewPosition[6]);
-
-    const finalBal0 = await wethRouter.balanceOf(rebaseContract);
-    const finalBal1 = await mangoRouter.balanceOf(rebaseContract);
-
-    console.log(ethers.utils.formatUnits(finalBal0), ethers.utils.formatUnits(finalBal1), "This final balance is fees earned + 50-49 residue.");
+    const _wethBalance_2 = await wethRouter.balanceOf(rebaseContract);
+    const _mangoBalance_2 = await mangoRouter.balanceOf(rebaseContract);
+    console.log("Weth Balance after swap & burn:", ethers.utils.formatUnits(_wethBalance_2), "Mango balance :",ethers.utils.formatUnits(_mangoBalance_2));
 
 }
-
 
 console.log("wart schnell...")
 main().catch((error) => {
